@@ -31,6 +31,7 @@ namespace EverythingToolbar
             InitializeComponent();
 
             SearchResultsListView.ItemsSource = EverythingSearch.Instance.SearchResults;
+            EverythingSearch.Instance.ResultsCleared += OnResultsCleared;
             ((INotifyCollectionChanged)SearchResultsListView.Items).CollectionChanged += OnCollectionChanged;
 
 #if SYNAPTICS
@@ -79,6 +80,11 @@ namespace EverythingToolbar
             }
         }
 #endif
+
+        private void OnResultsCleared(object sender, EventArgs e)
+        {
+            ScrollToVerticalOffset(0);
+        }
 
         private void OnCollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
         {

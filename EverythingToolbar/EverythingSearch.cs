@@ -91,9 +91,7 @@ namespace EverythingToolbar
                     return;
 
                 _searchTerm = value;
-                lock (_searchResultsLock)
-                    SearchResults.Clear();
-                QueryBatch();
+                QueryBatch(true);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("SearchTerm"));
             }
         }
@@ -111,9 +109,7 @@ namespace EverythingToolbar
                     return;
 
                 _currentFilter = value;
-                lock (_searchResultsLock)
-                    SearchResults.Clear();
-                QueryBatch();
+                QueryBatch(true);
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("CurrentFilter"));
             }
         }
@@ -125,6 +121,7 @@ namespace EverythingToolbar
         private readonly ILogger logger;
         private CancellationTokenSource cancellationTokenSource;
 
+        public event EventHandler<EventArgs> ResultsCleared;
         public event PropertyChangedEventHandler PropertyChanged;
 
         private EverythingSearch()
@@ -173,13 +170,11 @@ namespace EverythingToolbar
                 e.PropertyName == "isHideEmptySearchResults" ||
                 e.PropertyName == "sortBy")
             {
-                lock (_searchResultsLock)
-                    SearchResults.Clear();
-                QueryBatch();
+                QueryBatch(true);
             }
         }
 
-        public void QueryBatch()
+        public void QueryBatch(bool clear = false)
         {
             cancellationTokenSource?.Cancel();
 
@@ -187,7 +182,12 @@ namespace EverythingToolbar
                 return;
 
             if (SearchTerm == "" && Properties.Settings.Default.isHideEmptySearchResults)
+            {
+                lock (_searchResultsLock)
+                    SearchResults.Clear();
+
                 return;
+            }
 
             cancellationTokenSource = new CancellationTokenSource();
             CancellationToken cancellationToken = cancellationTokenSource.Token;
@@ -210,7 +210,7 @@ namespace EverythingToolbar
                     Everything_SetRegex(regEx);
                     Everything_SetMax((uint)BatchSize);
                     lock (_searchResultsLock)
-                        Everything_SetOffset((uint)SearchResults.Count);
+                        Everything_SetOffset(clear ? 0 : (uint)SearchResults.Count);
 
                     if (!Everything_QueryW(true))
                     {
@@ -219,6 +219,17 @@ namespace EverythingToolbar
                     }
 
                     uint resultsCount = Everything_GetNumResults();
+                    int resultsCountOld;
+                    lock(_searchResultsLock)
+                    {
+                        if (clear && resultsCount < SearchResults.Count)
+                            SearchResults.Clear();
+
+                        resultsCountOld = SearchResults.Count;
+                    }
+
+                    if (clear)
+                        ResultsCleared?.Invoke(this, new EventArgs());
 
                     for (uint i = 0; i < resultsCount; i++)
                     {
@@ -229,15 +240,30 @@ namespace EverythingToolbar
                         StringBuilder fullPath = new StringBuilder(4096);
                         Everything_GetResultFullPathNameW(i, fullPath, 4096);
 
+                        SearchResult result = new SearchResult()
+                        {
+                            HighlightedPath = path.ToString(),
+                            FullPathAndFileName = fullPath.ToString(),
+                            HighlightedFileName = filename,
+                            IsFile = isFile
+                        };
+
                         lock (_searchResultsLock)
                         {
-                            SearchResults.Add(new SearchResult()
-                            {
-                                HighlightedPath = path.ToString(),
-                                FullPathAndFileName = fullPath.ToString(),
-                                HighlightedFileName = filename,
-                                IsFile = isFile
-                            });
+                            if (SearchResults.Count > i && clear)
+                                SearchResults[(int)i] = result;
+                            else
+                                SearchResults.Add(result);
+                        }
+                    }
+
+                    if (clear)
+                    {
+                        for (int i = 0; i < resultsCountOld - resultsCount; i++)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            lock (_searchResultsLock)
+                                SearchResults.RemoveAt(SearchResults.Count - 1);
                         }
                     }
                 }
