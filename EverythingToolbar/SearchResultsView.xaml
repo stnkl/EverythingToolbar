@@ -242,7 +242,9 @@
               ItemTemplate="{DynamicResource searchResultsListTemplate}"
               ScrollViewer.ScrollChanged="OnScrollChanged"
               ScrollViewer.VerticalScrollBarVisibility="Visible"
-              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+              VirtualizingPanel.ScrollUnit="Pixel"
+              VirtualizingPanel.VirtualizationMode="Recycling">
     </ListView>
 
 </UserControl>
