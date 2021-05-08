@@ -1004,6 +1004,7 @@ namespace CSDeskBand
     using System.Windows.Documents;
     using System.Windows.Media;
     using System.Windows;
+    using System.Globalization;
 
     /// <summary>
     /// Wpf implementation of <see cref="ICSDeskBand"/>
@@ -1037,6 +1038,10 @@ namespace CSDeskBand
             {
                 TreatAsInputRoot = true,
                 WindowStyle = unchecked((int)(WindowStyles.WS_VISIBLE | WindowStyles.WS_POPUP)),
+                ExtendedWindowStyle = unchecked((int)(0x00400000 | // WS_EX_LAYOUTRTL
+                                                      0x00002000 | // WS_EX_RTLREADING
+                                                      0x00004000 | // WS_EX_LEFTSCROLLBAR
+                                                      0x00001000)),// WS_EX_RIGHT
                 HwndSourceHook = HwndSourceHook,
             };
 
@@ -1081,6 +1086,22 @@ namespace CSDeskBand
                         handled = true;
                         return new IntPtr((int)HitTestMessageResults.HTTRANSPARENT);
                     }
+                case 0x0005:
+                    if (CultureInfo.CurrentCulture.TextInfo.IsRightToLeft)
+                    {
+                        RECT size;
+                        User32.GetClientRect(hwnd, out size);
+
+                        RECT pos = new RECT();
+                        User32.MapWindowPoints(hwnd, IntPtr.Zero, ref pos, 2);
+
+                        User32.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, size.right, size.bottom, 0x00);
+
+                        ToolbarLogger.GetLogger("EverythingToolbar").Info("clientrect: x: " + (size.right - size.left).ToString() + ", y: " + (size.bottom - size.top).ToString());
+                        ToolbarLogger.GetLogger("EverythingToolbar").Info("clientrect: top: " + (size.top).ToString() + ", bottom: " + (size.bottom).ToString() + ", left: " + (size.left).ToString() + ", right: " + (size.right).ToString());
+                        ToolbarLogger.GetLogger("EverythingToolbar").Info("screenposi: top: " + (pos.top).ToString() + ", bottom: " + (pos.bottom).ToString() + ", left: " + (pos.left).ToString() + ", right: " + (pos.right).ToString());
+                    }
+                    break;
             }
 
             handled = false;
@@ -1565,6 +1586,7 @@ namespace CSDeskBand
     using System;
     using System.Runtime.InteropServices;
     using CSDeskBand.Interop;
+    using EverythingToolbar;
 
     /// <summary>
     /// The orientation of the taskbar.
@@ -1697,6 +1719,10 @@ namespace CSDeskBand
                 {
                     return;
                 }
+                ToolbarLogger.GetLogger("EverythingToolbar").Info("Size changed");
+
+                //RECT result;
+                //User32.GetClientRect(hWnd, out result);
 
                 _size = value;
                 TaskbarSizeChanged?.Invoke(this, new TaskbarSizeChangedEventArgs(value));
@@ -1713,6 +1739,8 @@ namespace CSDeskBand
                 hWnd = IntPtr.Zero,
                 cbSize = Marshal.SizeOf<APPBARDATA>()
             };
+
+            ToolbarLogger.GetLogger("EverythingToolbar").Info("UpdateInfo called");
 
             var res = Shell32.SHAppBarMessage(APPBARMESSAGE.ABM_GETTASKBARPOS, ref data);
             var rect = data.rc;
@@ -2064,6 +2092,15 @@ namespace CSDeskBand.Interop
 
     internal class User32
     {
+        [DllImport("user32.dll")]
+        public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32", ExactSpelling = true, SetLastError = true)]
+        internal static extern int MapWindowPoints(IntPtr hWndFrom, IntPtr hWndTo, [In, Out] ref RECT rect, [MarshalAs(UnmanagedType.U4)] int cPoints);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, int uFlags);
+
         [DllImport("user32.dll", SetLastError = true)]
         public static extern int SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 
